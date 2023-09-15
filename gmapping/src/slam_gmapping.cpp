@@ -274,6 +274,7 @@ void SlamGMapping::startLiveSlam()
   entropy_publisher_ = private_nh_.advertise<std_msgs::Float64>("entropy", 1, true);
   sst_ = node_.advertise<nav_msgs::OccupancyGrid>("map", 1, true);
   sstm_ = node_.advertise<nav_msgs::MapMetaData>("map_metadata", 1, true);
+  map_generating_flag_publisher_ = node_.advertise<std_msgs::Bool>("generating_map", 1, true);
   ss_ = node_.advertiseService("dynamic_map", &SlamGMapping::mapCallback, this);
   scan_filter_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(node_, "scan", 5);
   scan_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(*scan_filter_sub_, tf_, odom_frame_, 5);
@@ -289,6 +290,7 @@ void SlamGMapping::startReplay(const std::string &bag_fname, std::string scan_to
   entropy_publisher_ = private_nh_.advertise<std_msgs::Float64>("entropy", 1, true);
   sst_ = node_.advertise<nav_msgs::OccupancyGrid>("map", 1, true);
   sstm_ = node_.advertise<nav_msgs::MapMetaData>("map_metadata", 1, true);
+  map_generating_flag_publisher_ = node_.advertise<std_msgs::Bool>("generating_map", 1, true);
   ss_ = node_.advertiseService("dynamic_map", &SlamGMapping::mapCallback, this);
 
   rosbag::Bag bag;
@@ -660,9 +662,14 @@ void SlamGMapping::laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan)
 
     if (!got_map_ || (scan->header.stamp - last_map_update) > map_update_interval_)
     {
+      std_msgs::Bool generating_map;
+      generating_map.data = true;
+      map_generating_flag_publisher_.publish(generating_map);
       updateMap(*scan);
       last_map_update = scan->header.stamp;
       ROS_DEBUG("Updated the map");
+      generating_map.data = false;
+      map_generating_flag_publisher_.publish(generating_map);
     }
   }
   else
