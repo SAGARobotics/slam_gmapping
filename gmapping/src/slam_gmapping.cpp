@@ -169,6 +169,7 @@ void SlamGMapping::init()
 
   got_first_scan_ = false;
   got_map_ = false;
+  force_map_generation_ = false;
 
   // Parameters used by our GMapping wrapper
   if (!private_nh_.getParam("throttle_scans", throttle_scans_))
@@ -275,7 +276,10 @@ void SlamGMapping::startLiveSlam()
   sst_ = node_.advertise<nav_msgs::OccupancyGrid>("map", 1, true);
   sstm_ = node_.advertise<nav_msgs::MapMetaData>("map_metadata", 1, true);
   map_generating_flag_publisher_ = node_.advertise<std_msgs::Bool>("generating_map", 1, true);
+  new_map_generated_publisher_ = node_.advertise<std_msgs::Bool>("new_map_generated", 1, false);
   ss_ = node_.advertiseService("dynamic_map", &SlamGMapping::mapCallback, this);
+  force_map_generation_srv_ = private_nh_.advertiseService("force_map_generation", &SlamGMapping::forceMapGenerationSrvCb, this);
+
   scan_filter_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>(node_, "scan", 5);
   scan_filter_ = new tf::MessageFilter<sensor_msgs::LaserScan>(*scan_filter_sub_, tf_, odom_frame_, 5);
   scan_filter_->registerCallback(boost::bind(&SlamGMapping::laserCallback, this, _1));
@@ -291,6 +295,7 @@ void SlamGMapping::startReplay(const std::string &bag_fname, std::string scan_to
   sst_ = node_.advertise<nav_msgs::OccupancyGrid>("map", 1, true);
   sstm_ = node_.advertise<nav_msgs::MapMetaData>("map_metadata", 1, true);
   map_generating_flag_publisher_ = node_.advertise<std_msgs::Bool>("generating_map", 1, true);
+  new_map_generated_publisher_ = node_.advertise<std_msgs::Bool>("new_map_generated", 1, false);
   ss_ = node_.advertiseService("dynamic_map", &SlamGMapping::mapCallback, this);
 
   rosbag::Bag bag;
@@ -660,7 +665,7 @@ void SlamGMapping::laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan)
     map_to_odom_ = (odom_to_laser * laser_to_map).inverse();
     map_to_odom_mutex_.unlock();
 
-    if (!got_map_ || (scan->header.stamp - last_map_update) > map_update_interval_)
+    if (!got_map_ || force_map_generation_ || (scan->header.stamp - last_map_update) > map_update_interval_)
     {
       std_msgs::Bool generating_map;
       generating_map.data = true;
@@ -670,6 +675,10 @@ void SlamGMapping::laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan)
       ROS_DEBUG("Updated the map");
       generating_map.data = false;
       map_generating_flag_publisher_.publish(generating_map);
+      force_map_generation_ = false;
+      std_msgs::Bool new_map_generated;
+      new_map_generated.data = true;
+      new_map_generated_publisher_.publish(new_map_generated);
     }
   }
   else
@@ -821,6 +830,16 @@ bool SlamGMapping::mapCallback(nav_msgs::GetMap::Request &req,
   else
     return false;
 }
+
+bool SlamGMapping::forceMapGenerationSrvCb(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
+{
+  force_map_generation_ = true;
+  res.success = true;
+  res.message = "Requested new map generation.";
+  return true;
+}
+
+
 
 void SlamGMapping::publishTransform()
 {
