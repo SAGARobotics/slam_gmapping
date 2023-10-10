@@ -33,6 +33,7 @@
 #include "sensor_msgs/LaserScan.h"
 #include "std_msgs/Float64.h"
 #include "std_msgs/Bool.h"
+#include <std_srvs/Trigger.h>
 #include "nav_msgs/GetMap.h"
 #include "tf/transform_listener.h"
 #include "tf/transform_broadcaster.h"
@@ -68,7 +69,9 @@ class SlamGMapping
     ros::Publisher sst_;
     ros::Publisher sstm_;
     ros::Publisher map_generating_flag_publisher_;
+    ros::Publisher new_map_generated_publisher_;
     ros::ServiceServer ss_;
+    ros::ServiceServer force_map_generation_srv_;
     tf::TransformListener tf_;
     message_filters::Subscriber<sensor_msgs::LaserScan>* scan_filter_sub_;
     tf::MessageFilter<sensor_msgs::LaserScan>* scan_filter_;
@@ -89,6 +92,7 @@ class SlamGMapping
 
     bool got_first_scan_;
 
+    bool force_map_generation_;
     bool got_map_;
     nav_msgs::GetMap::Response map_;
 
@@ -111,6 +115,7 @@ class SlamGMapping
     bool getOdomPose(GMapping::OrientedPoint& gmap_pose, const ros::Time& t);
     bool initMapper(const sensor_msgs::LaserScan& scan);
     bool addScan(const sensor_msgs::LaserScan& scan, GMapping::OrientedPoint& gmap_pose);
+    bool forceMapGenerationSrvCb(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
     double computePoseEntropy();
 
     // Parameters used by GMapping
